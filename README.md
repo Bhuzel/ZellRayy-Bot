@@ -187,6 +187,93 @@ npm start
 
 ---
 
+## 🧩 Panduan Menambah Fitur Baru (Plugin Manager)
+
+**ZellRayy-Bot** menggunakan arsitektur **1-Plugin-Per-Berkas (ES Modules)** dengan fitur **Hot-Reload**. Kamu tidak perlu mendaftarkan plugin secara manual di `index.js` — cukup buat berkas `.js` baru di dalam direktori `plugins/<kategori>/`, dan bot akan otomatis mendeteksi serta memuatnya tanpa perlu merestart server.
+
+### 🛠️ Struktur Dasar Berkas Plugin
+
+Buat berkas JavaScript baru di `plugins/<kategori>/<nama_plugin>.js`:
+
+```javascript
+export default {
+  name: 'Nama Fitur Kamu',            // Nama fitur yang tampil di menu dropdown (.bmenu / .ballmenu)
+  command: ['perintah', 'alias1'],    // Perintah panggilan bot (array string)
+  category: 'tools',                  // Kategori menu (main, group, owner, downloader, search, maker, tools, ai, info)
+  description: 'Deskripsi singkat',   // Penjelasan kegunaan fitur
+  settings: {                         // Pengaturan hak akses (opsional)
+    owner: false,                     // true = khusus owner bot
+    premium: false,                   // true = khusus member premium
+    group: false,                     // true = khusus di dalam grup
+    private: false,                   // true = khusus di private chat
+    admin: false,                     // true = khusus admin grup
+    botAdmin: false                   // true = bot wajib jadi admin grup
+  },
+
+  async run({ m, args, text, react, sock, config, usedPrefix }) {
+    // 1. Berikan respon emotil loading (opsional)
+    await react('loading')
+
+    // 2. Logika fitur / panggil API kamu
+    if (!args[0]) {
+      await react('error')
+      return m.reply('Masukkan parameter yang dibutuhkan!')
+    }
+
+    // 3. Kirim respon balasan
+    await m.reply(`Halo! Kamu mengetik: ${args.join(' ')}`)
+    await react('ok')
+  }
+}
+```
+
+### 💡 Variabel Parameter Pada Handler `run`:
+
+| Parameter | Tipe | Deskripsi |
+| :--- | :--- | :--- |
+| `m` | `Object` | Object pesan Baileys ter-serialize (memiliki method `m.reply()`, `m.download()`, `m.react()`, `m.chat`, `m.sender`, dll) |
+| `args` | `Array` | Parameter argumen teks yang dipisah spasi (contoh: `['halo', 'dunia']`) |
+| `text` | `String` | Gabungan teks argumen (contoh: `'halo dunia'`) |
+| `react` | `Function` | Helper reaksi emoji pada pesan (`await react('loading')`, `'ok'`, atau `'error'`) |
+| `sock` | `Object` | Instance WASocket Baileys utama |
+| `config` | `Object` | Konfigurasi bot dari `config.js` |
+| `usedPrefix` | `String` | Prefix yang digunakan saat memanggil perintah |
+
+### 🛠️ Daftar Helper Method Pengiriman Pesan & Media (`m` & `sock`)
+
+Di dalam handler plugin `run({ m, sock })`, kamu dapat menggunakan helper method berikut secara langsung untuk mengirim teks, media, stiker, kontak, dan tombol:
+
+#### 1. Method Utama pada Object `m` (Merespon Chat Saat Ini)
+
+| Method | Contoh Penggunaan | Deskripsi |
+| :--- | :--- | :--- |
+| `m.reply(text)` | `await m.reply('Halo dunia!')` | Membalas pesan dengan me-quote pesan pengirim |
+| `m.sendText(text)` | `await m.sendText('Pesan tanpa quote')` | Mengirim pesan teks tanpa me-quote pesan pengirim |
+| `m.sendImage(bufOrUrl, caption)` | `await m.sendImage(buffer, 'Ini gambar')` | Mengirim gambar (dari Buffer atau URL link) |
+| `m.sendVideo(bufOrUrl, caption)` | `await m.sendVideo(buffer, 'Ini video')` | Mengirim video MP4 (dari Buffer atau URL link) |
+| `m.sendAudio(bufOrUrl, ptt)` | `await m.sendAudio(buffer, true)` | Mengirim audio MP3 atau Voice Note PTT (jika `ptt: true`) |
+| `m.sendSticker(buffer, opts)` | `await m.sendSticker(buffer, { packname, author })` | Mengirim stiker WebP (statis atau animasi) |
+| `m.sendDocument(buffer, fileName, opts)` | `await m.sendDocument(buffer, 'data.pdf')` | Mengirim berkas / dokumen |
+| `m.sendContact(number, name)` | `await m.sendContact('6282352052566', 'ZellRayy')` | Mengirim kartu kontak vCard |
+| `m.sendLocation(lat, lng, name)` | `await m.sendLocation(-6.2, 106.8, 'Jakarta')` | Mengirim lokasi peta |
+| `m.sendButton(caption, buttons, footer)` | `await m.sendButton('Pilih:', [{ text: 'Ping', id: '.ping' }])` | Mengirim tombol interaktif (Native Flow) |
+| `m.react(emoji)` | `await react('loading')` / `'ok'` / `'error'` | Memberikan reaksi emoji pada pesan pengirim |
+| `m.download(fromQuoted)` | `const buf = await m.download(true)` | Mengunduh media (foto/video/vn/stiker) dari pesan atau quoted reply |
+| `m.delete()` | `await m.delete()` | Menghapus pesan (jika bot admin atau pesan dari me) |
+
+#### 2. Method Utama pada Object `sock` (Socket Instance Baileys)
+
+| Method | Contoh Penggunaan | Deskripsi |
+| :--- | :--- | :--- |
+| `sock.sendMessage(jid, content, opts)` | `await sock.sendMessage(m.chat, { text: 'Halo', ai: true })` | Method standar Baileys (mendukung `{ ai: true }` untuk AI badge) |
+| `sock.sendButtons(jid, data, opts)` | `await sock.sendButtons(m.chat, { image, caption, buttons })` | Mengirim Interactive Native Flow Buttons (Image Header + CTA + List) |
+| `sock.groupMetadata(jid)` | `const meta = await sock.groupMetadata(m.chat)` | Mengambil metadata grup (nama, member, admin, dll) |
+| `sock.newsletterMetadata(type, key)` | `const meta = await sock.newsletterMetadata('invite', code)` | Mengambil metadata WhatsApp Channel / Newsletter |
+| `sock.updateProfilePicture(jid, buf)` | `await sock.updateProfilePicture(m.chat, buffer)` | Memperbarui foto profil akun bot atau grup |
+| `sock.removeProfilePicture(jid)` | `await sock.removeProfilePicture(m.chat)` | Menghapus foto profil akun bot atau grup |
+
+---
+
 ## 🌐 Tautan & Kontak Resmi
 
 - **Developer GitHub**: [https://github.com/Bhuzel](https://github.com/Bhuzel)
