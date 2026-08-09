@@ -191,7 +191,7 @@ async function startBot() {
     getMessage: async (key) => {
       const stored = msgStore.get(key.id)
       if (stored?.message) return stored.message
-      return { conversation: '' }
+      return undefined
     }
   })
 
