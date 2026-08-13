@@ -8,7 +8,7 @@ export default {
 
   // ── Prefix & Mode ──────────────────────────────────────────────────────────
   prefix: ['.', '/', '!', '#'],
-  usePrefix: true,
+  usePrefix: false,
 
   // ── Owner & Premium ────────────────────────────────────────────────────────
   ownerNumber: [
@@ -16,9 +16,6 @@ export default {
   ],
   premiumNumber: [],
 
-  // ── Tampilan Menu ──────────────────────────────────────────────────────────
-  // 'interactive' = Tampilan menu dengan thumbnail card & header link
-  // 'text'        = Tampilan menu teks murni (basic / tanpa gambar)
   menuStyle: 'interactive',
   menuThumbnail: 'https://api.zellrayy.com/assets/logo.png',
   menuLink: 'https://api.zellrayy.com',
@@ -33,7 +30,7 @@ export default {
   },
 
   apiKeys: {
-    zellrayy: 'ISI_API_KEY_KAMU_DISINI_____soon'
+    zellrayy: 'ISI_API_KEY_KAMU_DISINI_____soon',
   },
 
   // ── Sticker Credit ─────────────────────────────────────────────────────────

@@ -19,7 +19,16 @@ import { isBanned } from './lib/bannedDB.js'
 import { isBannedChat } from './lib/bannedChatDB.js'
 import { getExtraPremium } from './lib/premiumDB.js'
 import { attachWrapper } from './lib/wrapper.js'
+import { createMessageStore } from './lib/msgStore.js'
 import util from 'util'
+
+// PENTING: store dibikin SEKALI di module scope, BUKAN di dalam startBot().
+// startBot() dipanggil ulang tiap kali Baileys reconnect — kalau store-nya
+// dibikin di dalem situ, tiap reconnect bakal reset jadi kosong lagi (ini
+// yang sebelumnya bikin ".crm" kehilangan raw message padahal baru aja
+// dikirim). Detail lengkap ada di lib/msgStore.js.
+const msgStore = createMessageStore()
+global.store = msgStore
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const question = (text) => new Promise((resolve) => rl.question(text, resolve))
@@ -162,8 +171,6 @@ async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState(config.sessionName)
   const { version } = await fetchLatestBaileysVersion()
 
-  const msgStore = new Map()
-  const MAX_STORE = 500
   const groupCache = new Map()
 
   const getGroupMetadata = async (chatJid, forceRefresh = false) => {
@@ -283,16 +290,16 @@ async function startBot() {
   }
   plugins._onUpdate = () => { _symbolCommands = null }
 
+  const storeRawMsg = (rawMsg) => {
+    if (!rawMsg?.message) return
+    if (rawMsg.key.remoteJid === 'status@broadcast') return
+    msgStore.set(rawMsg.key.id, rawMsg)
+  }
+
   const processMsg = async (rawMsg) => {
     try {
       if (!rawMsg?.message) return
       if (rawMsg.key.remoteJid === 'status@broadcast') return
-
-      if (msgStore.size >= MAX_STORE) {
-        const firstKey = msgStore.keys().next().value
-        msgStore.delete(firstKey)
-      }
-      msgStore.set(rawMsg.key.id, rawMsg)
 
       const m = serialize(rawMsg, sock, config)
       const body = m.body || ''
@@ -474,6 +481,21 @@ async function startBot() {
   }
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    // PENTING: simpen ke msgStore buat SEMUA upsert type (notify/append/dll),
+    // JANGAN digembok di belakang cek "type !== 'notify'". Sebelumnya baris
+    // storage nyatu di dalem processMsg, yang di-skip total kalau type bukan
+    // 'notify' -> akibatnya pesan yang echo-nya masuk sebagai type 'append'
+    // (ini yang biasa kejadian pas bot ngirim pesan lewat sock.relayMessage()
+    // MANUAL/langsung, kayak carousel/native_flow yang dirakit tangan di
+    // plugin - beda jalur sama sock.sendMessage/sock.sendButtons yang
+    // upsert-nya konsisten 'notify') GAK PERNAH ke-simpen ke store sama
+    // sekali. Efeknya: pas user reply carousel itu - MAU SECEPAT APAPUN -
+    // .crm gak nemu apa2 di store, jatoh ke fallback quotedMessage yang
+    // emang udah dipotong WhatsApp (cards/buttons ilang). Fix-nya: pisahin
+    // "nyimpen raw message" (jalan buat semua type) dari "proses & jalanin
+    // command" (tetep cuma buat type === 'notify', biar gak double-eksekusi
+    // command dari history-sync/append).
+    for (const rawMsg of messages) storeRawMsg(rawMsg)
     if (type !== 'notify') return
     await processMsg(messages[0])
   })
